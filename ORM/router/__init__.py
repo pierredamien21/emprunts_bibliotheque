@@ -1,0 +1,9 @@
+from .type_membre import router as type_membre
+from .membre import router as membre
+from .bibliotecaire import router as bibliotecaire
+from .categorie import router as categorie
+from .livre import router as livre
+from .exemplaire import router as exemplaire
+from .emprunt import router as emprunt
+from .reservation import router as reservation
+from .sanction import router as sanction
