@@ -1,136 +1,158 @@
--- =====================================================
--- VUES SQL - TABLEAUX DE BORD
--- Base de données : Bibliothèque
--- =====================================================
+-- ================================
+-- 1. TYPE_MEMBRE
+-- ================================
+CREATE TABLE type_membre (
+    id_type_membre SERIAL PRIMARY KEY,
+    nom_type VARCHAR(50) NOT NULL UNIQUE,
+    duree_max_emprunt INT NOT NULL CHECK (duree_max_emprunt > 0),
+    nb_max_emprunt INT NOT NULL CHECK (nb_max_emprunt >= 0)
+);
 
+-- ================================
+-- 2. MEMBRE
+-- ================================
+CREATE TABLE membre (
+    id_membre SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    prenom VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    telephone VARCHAR(20),
+    adresse TEXT,
+    date_inscription DATE NOT NULL DEFAULT CURRENT_DATE,
+    id_type_membre INT NOT NULL,
 
--- =====================================================
--- 1. LIVRES / EXEMPLAIRES DISPONIBLES
--- =====================================================
+    CONSTRAINT fk_membre_type
+        FOREIGN KEY (id_type_membre)
+        REFERENCES type_membre(id_type_membre)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
 
-CREATE OR REPLACE VIEW vue_exemplaires_disponibles AS
-SELECT
-    e.id_exemplaire,
-    l.titre,
-    l.auteur,
-    c.nom_categorie,
-    e.code_barre
-FROM exemplaire e
-JOIN livre l ON e.id_livre = l.id_livre
-JOIN categorie c ON l.id_categorie = c.id_categorie
-WHERE e.etat = 'Disponible';
+-- ================================
+-- 3. BIBLIOTECAIRE
+-- ================================
+CREATE TABLE bibliotecaire (
+    id_bibliotecaire SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    prenom VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    telephone VARCHAR(20)
+);
 
+-- ================================
+-- 4. CATEGORIE
+-- ================================
+CREATE TABLE categorie (
+    id_categorie SERIAL PRIMARY KEY,
+    nom_categorie VARCHAR(100) NOT NULL UNIQUE
+);
 
--- =====================================================
--- 2. EMPRUNTS EN COURS
--- =====================================================
+-- ================================
+-- 5. LIVRE
+-- ================================
+CREATE TABLE livre (
+    id_livre SERIAL PRIMARY KEY,
+    titre VARCHAR(255) NOT NULL,
+    auteur VARCHAR(255) NOT NULL,
+    annee_publication INT CHECK (annee_publication > 0),
+    id_categorie INT NOT NULL,
 
-CREATE OR REPLACE VIEW vue_emprunts_en_cours AS
-SELECT
-    em.id_emprunt,
-    m.nom,
-    m.prenom,
-    l.titre,
-    e.code_barre,
-    em.date_emprunt,
-    em.date_retour_prevue
-FROM emprunt em
-JOIN membre m ON em.id_membre = m.id_membre
-JOIN exemplaire e ON em.id_exemplaire = e.id_exemplaire
-JOIN livre l ON e.id_livre = l.id_livre
-WHERE em.statut = 'En cours';
+    CONSTRAINT fk_livre_categorie
+        FOREIGN KEY (id_categorie)
+        REFERENCES categorie(id_categorie)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
 
+-- ================================
+-- 6. EXEMPLAIRE
+-- ================================
+CREATE TABLE exemplaire (
+    id_exemplaire SERIAL PRIMARY KEY,
+    id_livre INT NOT NULL,
+    code_barre VARCHAR(100) NOT NULL UNIQUE,
+    etat VARCHAR(20) NOT NULL
+        CHECK (etat IN ('Disponible', 'Emprunté', 'Réservé', 'Abîmé')),
 
--- =====================================================
--- 3. EMPRUNTS EN RETARD
--- =====================================================
+    CONSTRAINT fk_exemplaire_livre
+        FOREIGN KEY (id_livre)
+        REFERENCES livre(id_livre)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
 
-CREATE OR REPLACE VIEW vue_emprunts_retard AS
-SELECT
-    em.id_emprunt,
-    m.nom,
-    m.prenom,
-    l.titre,
-    em.date_retour_prevue,
-    CURRENT_DATE - em.date_retour_prevue AS jours_retard
-FROM emprunt em
-JOIN membre m ON em.id_membre = m.id_membre
-JOIN exemplaire e ON em.id_exemplaire = e.id_exemplaire
-JOIN livre l ON e.id_livre = l.id_livre
-WHERE em.statut = 'Retard';
+-- ================================
+-- 7. EMPRUNT
+-- ================================
+CREATE TABLE emprunt (
+    id_emprunt SERIAL PRIMARY KEY,
+    id_membre INT NOT NULL,
+    id_exemplaire INT NOT NULL,
+    id_bibliotecaire INT NOT NULL,
+    date_emprunt DATE NOT NULL DEFAULT CURRENT_DATE,
+    date_retour_prevue DATE NOT NULL,
+    date_retour_effective DATE,
+    statut VARCHAR(20) NOT NULL
+        CHECK (statut IN ('En cours', 'Terminé', 'Retard')),
 
+    CONSTRAINT fk_emprunt_membre
+        FOREIGN KEY (id_membre)
+        REFERENCES membre(id_membre),
 
--- =====================================================
--- 4. HISTORIQUE DES EMPRUNTS
--- =====================================================
+    CONSTRAINT fk_emprunt_exemplaire
+        FOREIGN KEY (id_exemplaire)
+        REFERENCES exemplaire(id_exemplaire),
 
-CREATE OR REPLACE VIEW vue_historique_emprunts AS
-SELECT
-    em.id_emprunt,
-    m.nom,
-    m.prenom,
-    l.titre,
-    em.date_emprunt,
-    em.date_retour_effective,
-    em.statut
-FROM emprunt em
-JOIN membre m ON em.id_membre = m.id_membre
-JOIN exemplaire e ON em.id_exemplaire = e.id_exemplaire
-JOIN livre l ON e.id_livre = l.id_livre;
+    CONSTRAINT fk_emprunt_bibliotecaire
+        FOREIGN KEY (id_bibliotecaire)
+        REFERENCES bibliotecaire(id_bibliotecaire)
+);
 
+-- ================================
+-- 8. RESERVATION
+-- ================================
+CREATE TABLE reservation (
+    id_reservation SERIAL PRIMARY KEY,
+    id_membre INT NOT NULL,
+    id_exemplaire INT NOT NULL,
+    id_bibliotecaire INT NOT NULL,
+    date_reservation DATE NOT NULL DEFAULT CURRENT_DATE,
+    statut VARCHAR(20) NOT NULL
+        CHECK (statut IN ('En attente', 'Confirmée', 'Annulée')),
+    priorite INT NOT NULL CHECK (priorite > 0),
 
--- =====================================================
--- 5. RÉSERVATIONS EN ATTENTE
--- =====================================================
+    CONSTRAINT fk_reservation_membre
+        FOREIGN KEY (id_membre)
+        REFERENCES membre(id_membre),
 
-CREATE OR REPLACE VIEW vue_reservations_en_attente AS
-SELECT
-    r.id_reservation,
-    m.nom,
-    m.prenom,
-    l.titre,
-    r.date_reservation,
-    r.priorite
-FROM reservation r
-JOIN membre m ON r.id_membre = m.id_membre
-JOIN exemplaire e ON r.id_exemplaire = e.id_exemplaire
-JOIN livre l ON e.id_livre = l.id_livre
-WHERE r.statut = 'En attente'
-ORDER BY r.priorite;
+    CONSTRAINT fk_reservation_exemplaire
+        FOREIGN KEY (id_exemplaire)
+        REFERENCES exemplaire(id_exemplaire),
 
+    CONSTRAINT fk_reservation_bibliotecaire
+        FOREIGN KEY (id_bibliotecaire)
+        REFERENCES bibliotecaire(id_bibliotecaire)
+);
 
--- =====================================================
--- 6. SANCTIONS NON PAYÉES
--- =====================================================
+-- ================================
+-- 9. SANCTION
+-- ================================
+CREATE TABLE sanction (
+    id_sanction SERIAL PRIMARY KEY,
+    id_membre INT NOT NULL,
+    id_bibliotecaire INT NOT NULL,
+    type_sanction VARCHAR(20) NOT NULL
+        CHECK (type_sanction IN ('Retard', 'Perte', 'Dommage')),
+    montant NUMERIC(10,2) NOT NULL CHECK (montant >= 0),
+    date_sanction DATE NOT NULL DEFAULT CURRENT_DATE,
+    statut VARCHAR(20) NOT NULL
+        CHECK (statut IN ('Payée', 'Non payée')),
 
-CREATE OR REPLACE VIEW vue_sanctions_non_payees AS
-SELECT
-    s.id_sanction,
-    m.nom,
-    m.prenom,
-    s.type_sanction,
-    s.montant,
-    s.date_sanction
-FROM sanction s
-JOIN membre m ON s.id_membre = m.id_membre
-WHERE s.statut = 'Non payée';
+    CONSTRAINT fk_sanction_membre
+        FOREIGN KEY (id_membre)
+        REFERENCES membre(id_membre),
 
-
--- =====================================================
--- 7. TABLEAU DE BORD PAR MEMBRE
--- =====================================================
-
-CREATE OR REPLACE VIEW vue_dashboard_membre AS
-SELECT
-    m.id_membre,
-    m.nom,
-    m.prenom,
-    tm.nom_type,
-    COUNT(em.id_emprunt) FILTER (WHERE em.statut = 'En cours') AS emprunts_en_cours,
-    COUNT(em.id_emprunt) FILTER (WHERE em.statut = 'Retard') AS emprunts_en_retard,
-    COUNT(s.id_sanction) FILTER (WHERE s.statut = 'Non payée') AS sanctions_non_payees
-FROM membre m
-JOIN type_membre tm ON m.id_type_membre = tm.id_type_membre
-LEFT JOIN emprunt em ON em.id_membre = m.id_membre
-LEFT JOIN sanction s ON s.id_membre = m.id_membre
-GROUP BY m.id_membre, tm.nom_type;
+    CONSTRAINT fk_sanction_bibliotecaire
+        FOREIGN KEY (id_bibliotecaire)
+        REFERENCES bibliotecaire(id_bibliotecaire)
+);
